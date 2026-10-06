@@ -1,0 +1,45 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>لوحة التحكم - SportScope</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="style.css">
+<style>.w{max-width:900px;margin:30px auto;padding:0 16px}.f{background:#fff;border-radius:12px;padding:18px;margin-bottom:20px;display:grid;gap:10px}
+input,select,textarea{padding:10px;border:1px solid #d1d5db;border-radius:8px;font:inherit;width:100%}button{background:var(--red);color:#fff;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font:inherit}
+.r{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee}.r button{background:#444;padding:6px 12px}.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}.tabs button{background:#fff;color:#000}.tabs button.on{background:var(--red);color:#fff}</style></head><body>
+<div class="w"><h1 style="margin-bottom:20px">لوحة التحكم <a href="/" style="font-size:14px;color:var(--red)">← الموقع</a></h1>
+<form class="f" id="lg"><h2>تسجيل الدخول</h2><input id="u" placeholder="اسم المستخدم" autocomplete="username"><input id="p" type="password" placeholder="كلمة المرور" autocomplete="current-password"><button>دخول</button><small id="er" style="color:red"></small></form>
+<div id="app" style="display:none"><div class="tabs" id="tabs"></div><form class="f" id="fm"></form><div class="f" id="ls"></div><button onclick="sessionStorage.clear();location.reload()" style="background:#444">تسجيل خروج</button></div></div>
+<script>
+const API=location.protocol==='file:'?'http://localhost:3000':'';
+const CATS=['كرة القدم','ميركاتو','كرة السلة','التنس','الدوري المصري','الدوري السعودي','دوري أبطال أوروبا','الدوري الإنجليزي','الدوري الإسباني','الدوري الإيطالي','كأس العالم'];
+const CFG={
+ articles:{n:'الأخبار',f:[['title','العنوان'],['category','القسم',CATS],['image','صورة الخبر من الكمبيوتر','file'],['imageAlt','وصف الصورة (ALT)'],['seoTitle','عنوان SEO (حتى 70 حرفًا)'],['seoDescription','وصف SEO (حتى 160 حرفًا)','area'],['focusKeyword','كلمة البحث الرئيسية'],['body','نص الخبر','area']],l:x=>x.title},
+ matches:{n:'المباريات',f:[['league','البطولة',CATS.slice(4)],['home','الفريق الأول'],['away','الفريق الثاني'],['startAt','موعد المباراة (التاريخ والساعة)','datetime']],l:x=>`${x.home} × ${x.away}`},
+ videos:{n:'الفيديو',f:[['title','العنوان'],['url','رابط يوتيوب']],l:x=>x.title},
+ standings:{n:'ترتيب الدوريات',f:[['league','البطولة',CATS.slice(4)],['team','الفريق'],['p','لعب'],['w','فوز'],['d','تعادل'],['l','خسارة'],['pts','نقاط']],l:x=>`${x.league} - ${x.team} (${x.pts})`},
+users:{n:'التسجيلات',f:[],l:x=>`${x.name} — ${x.email}`},
+ about:{n:'من نحن',f:[['title','عنوان الصفحة'],['body','نبذة الموقع','area'],['email','بريد التواصل']],l:x=>x.title},
+ siteSettings:{n:'هوية الموقع',f:[['logo','لوجو الموقع من الكمبيوتر','file']],l:x=>x.logo?'تم رفع اللوجو':'لم يتم رفع لوجو'}
+};
+const $=id=>document.getElementById(id);let T=sessionStorage.getItem('t'),col='articles',eid=null,rows=[];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const normalized=(k,v)=>k==='startAt'&&v?new Date(v).toISOString():v;
+const api=(u,m='GET',b)=>fetch(API+u,{method:m,headers:{'Content-Type':'application/json',Authorization:'Bearer '+T},body:b&&JSON.stringify(b)}).then(r=>{if(r.status===401&&T){sessionStorage.clear();location.reload()}return r.json()});
+$('lg').onsubmit=async e=>{e.preventDefault();try{const d=await (await fetch(API+'/api/login',{method:'POST',body:JSON.stringify({user:$('u').value,pass:$('p').value})})).json();
+  if(d.token){T=d.token;sessionStorage.setItem('t',T);show()}else $('er').textContent=d.error}catch{$('er').textContent='السيرفر غير شغال'}};
+function show(){$('lg').style.display='none';$('app').style.display='block';tab(col)}
+function tab(c){col=c;eid=(c==='about'||c==='siteSettings')?1:null;$('tabs').innerHTML=Object.entries(CFG).map(([k,v])=>`<button class="${k===c?'on':''}" onclick="tab('${k}')">${v.n}</button>`).join('');
+  if(c==='users'){$('fm').style.display='none';list();return}
+  if(c==='siteSettings'){$('fm').style.display='grid';$('fm').innerHTML='<h2>هوية الموقع</h2><p class="admin-note">ارفع لوجو الموقع بصيغة PNG أو JPG أو WEBP. سيظهر أعلى الموقع، كأيقونة للموقع، ويُستخدم في بيانات الموقع التي تساعد محركات البحث على فهم هوية SportScope.</p><label>لوجو الموقع من الكمبيوتر<input id="f_logo" type="file" accept="image/jpeg,image/png,image/webp"></label><button>حفظ اللوجو</button>';list();return}
+  $('fm').style.display='grid';
+  $('fm').innerHTML=`<h2>${eid?'تعديل':'إضافة'} - ${CFG[c].n}</h2>`+(c==='matches'?`<div style="background:#eff6ff;border:1px solid #bfdbfe;padding:12px;border-radius:8px;font-size:14px;line-height:1.8"><b>تلقائي:</b> لا تحتاج لكتابة أن المباراة بدأت أو انتهت. الموقع يحسب الحالة تلقائيًا: قبل الموعد عداد، من وقت البداية وحتى ساعتين = مباشر، وبعد ساعتين = انتهت.</div>`:'')+(c==='articles'?`<div style="background:#fff7ed;border:1px solid #fed7aa;padding:12px;border-radius:8px;font-size:14px;line-height:1.8"><b>SEO:</b> اكتب كلمة البحث التي تريد أن يرتبط بها المقال بشكل طبيعي، واكتب عنوانًا ووصفًا واضحين. لا تكرر الكلمة بشكل مبالغ فيه؛ جودة المقال أهم من كثرة الكلمات.</div>`:'')+CFG[c].f.map(([k,l,t])=>t==='area'?`<textarea id="f_${k}" rows="6" placeholder="${l}" required></textarea>`:t==='file'?`<label>${l}<input id="f_${k}" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label>`:t==='datetime'?`<label>${l}<input id="f_${k}" type="datetime-local"></label>`:Array.isArray(t)?`<select id="f_${k}">${t.map(o=>`<option>${o}</option>`).join('')}</select>`:`<input id="f_${k}" placeholder="${l}" maxlength="${k==='seoTitle'?70:k==='seoDescription'?160:k==='focusKeyword'?100:300}">`).join('')+'<button>حفظ</button>';
+  list()}
+async function list(){rows=await api('/api/'+col);if(col==='articles')rows.sort((a,b)=>b.id-a.id);
+  if(col==='users'){$('ls').innerHTML=`<h2>التسجيلات (${rows.length})</h2>`+rows.map(x=>`<div class="r"><span><b>${esc(x.name)}</b><br><small>${esc(x.email)} • ${new Date(x.date).toLocaleDateString('ar-EG')}</small></span></div>`).join('')||'<p>لا توجد تسجيلات بعد</p>';return}
+  $('ls').innerHTML=`<h2>${col==='matches'?'المباريات المضافة':'القائمة'} (${rows.length})</h2>`+rows.map(x=>col==='matches'?`<div class="admin-match"><div><strong>${esc(x.home)} <span>VS</span> ${esc(x.away)}</strong><small>${esc(x.league)} • ${x.startAt?new Date(x.startAt).toLocaleString('ar-EG'):'موعد غير محدد'}</small></div><div><button onclick="ed(${x.id})">تعديل</button> <button onclick="del(${x.id})">حذف</button></div></div>`:`<div class="r"><span>${esc(CFG[col].l(x))}</span><span><button onclick="ed(${x.id})">تعديل</button> <button onclick="del(${x.id})">حذف</button></span></div>`).join('')}
+function ed(id){eid=id;const x=rows.find(r=>r.id===id);CFG[col].f.forEach(([k,,t])=>{if(t!=='file'){let v=x[k]||'';if(t==='datetime'&&v){const d=new Date(v);v=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}$('f_'+k).value=v}});scrollTo(0,0)}
+async function del(id){if(confirm('تأكيد الحذف؟')){await api(`/api/${col}/${id}`,'DELETE');list()}}
+$('fm').onsubmit=async e=>{e.preventDefault();if(col==='users')return;const hasFile=CFG[col].f.some(x=>x[2]==='file');
+  if(hasFile){const fd=new FormData();for(const [k] of CFG[col].f){const el=$('f_'+k);if(el.type==='file'){if(el.files[0])fd.append(k,el.files[0])}else fd.append(k,normalized(k,el.value))}
+    const r=await fetch(API+(eid?`/api/${col}/${eid}`:'/api/'+col),{method:eid?'PUT':'POST',headers:{Authorization:'Bearer '+T},body:fd});if(!r.ok)return alert('تعذر حفظ البيانات');await r.json();
+  }else{const b={};CFG[col].f.forEach(([k])=>b[k]=normalized(k,$('f_'+k).value));await api(eid?`/api/${col}/${eid}`:'/api/'+col,eid?'PUT':'POST',b)}
+  tab(col)};
+if(T)show();
+</script></body></html>
